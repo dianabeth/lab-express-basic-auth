@@ -1,11 +1,19 @@
 const { join } = require('path');
 const express = require('express');
+const expressSession = require('express-session');
+const connectMongo = require('connect-mongo');
+const mongoose = require('mongoose');
 const createError = require('http-errors');
 const logger = require('morgan');
 const sassMiddleware = require('node-sass-middleware');
 const serveFavicon = require('serve-favicon');
 
+const mongoStore = connectMongo(expressSession);
+
 const indexRouter = require('./routes/index');
+const deserializeUser = require('./middleware/deserializeUser');
+const bindUserToResponseLocals = require('./middleware/bindUserToResponseLocals');
+const authenticationRouter = require('./routes/authentication');
 
 const app = express();
 
@@ -28,7 +36,26 @@ app.use(
   })
 );
 
+app.use(
+  expressSession({
+    secret: 'ABC',
+    resave: true,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 15 * 24 * 60 * 60 * 1000
+    },
+    store: new mongoStore({
+      mongooseConnection: mongoose.connection,
+      ttl: 60 * 60
+    })
+  })
+);
+
+app.use(deserializeUser);
+app.use(bindUserToResponseLocals);
+
 app.use('/', indexRouter);
+app.use('/authentication', authenticationRouter);
 
 // Catch missing routes and forward to error handler
 app.use((req, res, next) => {
